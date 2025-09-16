@@ -3,7 +3,7 @@
 This project allows you to control ESP32-connected relays through a web interface with secure access. It uses **WebSockets** for real-time communication between the ESP32 devices and the web control panel.
 
 ## Hardware Repository
-[ESP32 Relay Control Hardware](https://github.com/farhad-zada/esp32-hardware.git)
+- [ESP32 Relay Control Hardware](https://github.com/farhad-zada/esp32-hardware.git)
 
 ## Features
 
