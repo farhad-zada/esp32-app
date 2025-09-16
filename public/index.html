@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Relay Control</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --gray: #6b7280;
+      --light: #f3f4f6;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+    }
+
+    .header {
+      background: var(--primary);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .status-bar {
+      background: var(--light);
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    .status-dot.connected {
+      background: var(--success);
+    }
+
+    .controls {
+      padding: 30px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .relay-card {
+      background: var(--light);
+      padding: 25px;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .relay-title {
+      font-size: 1.5rem;
+      color: var(--gray);
+      margin-bottom: 15px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 12px 25px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 100px;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-on {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-on:hover:not(:disabled) {
+      background: #15803d;
+    }
+
+    .btn-off {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-off:hover:not(:disabled) {
+      background: #b91c1c;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateX(0);
+    }
+
+    .toast.success {
+      background: var(--success);
+    }
+
+    .toast.error {
+      background: var(--danger);
+    }
+
+    @media (max-width: 600px) {
+      .btn-group {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>ESP32 Relay Control</h1>
+    </div>
+
+    <div class="status-bar">
+      <div class="status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+      <div id="deviceCount">Devices: 0</div>
+    </div>
+
+    <div class="controls">
+      <div class="relay-card">
+        <h2 class="relay-title">Relay 1</h2>
+        <div class="btn-group">
+          <button class="btn btn-on" onclick="controlRelay('relay1', 'on')">ON</button>
+          <button class="btn btn-off" onclick="controlRelay('relay1', 'off')">OFF</button>
+        </div>
+      </div>
+
+      <div class="relay-card">
+        <h2 class="relay-title">Relay 2</h2>
+        <div class="btn-group">
+          <button class="btn btn-on" onclick="controlRelay('relay2', 'on')">ON</button>
+          <button class="btn btn-off" onclick="controlRelay('relay2', 'off')">OFF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API_BASE = '/api';
+    let isConnected = false;
+
+    async function updateStatus() {
+      try {
+        const response = await fetch(`${API_BASE}/status`);
+        const data = await response.json();
+
+        isConnected = data.connectedDevices > 0;
+        document.getElementById('statusDot').className = `status-dot ${isConnected ? 'connected' : ''}`;
+        document.getElementById('statusText').textContent = isConnected ? 'Connected' : 'Disconnected';
+        document.getElementById('deviceCount').textContent = `Devices: ${data.connectedDevices}`;
+
+        // Optional: log device details
+        if (data.devices) {
+          console.table(data.devices);
+        }
+
+        document.querySelectorAll('.btn').forEach(btn => {
+          btn.disabled = !isConnected;
+        });
+      } catch (error) {
+        console.error('Error updating status:', error);
+        showToast('Error checking status', 'error');
+      }
+    }
+
+    async function controlRelay(relay, action) {
+      if (!isConnected) {
+        showToast('No devices connected', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/control`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ relay, action }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showToast(`Relay ${relay.slice(-1)} turned ${action.toUpperCase()}`, 'success');
+        } else {
+          showToast(data.error, 'error');
+        }
+      } catch (error) {
+        console.error('Error controlling relay:', error);
+        showToast('Error sending command', 'error');
+      }
+    }
+
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    // Update status every 5 seconds
+    setInterval(updateStatus, 5000);
+    updateStatus(); // Initial update
+  </script>
+</body>
+
+</html>
