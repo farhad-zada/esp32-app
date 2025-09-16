@@ -3,6 +3,8 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const cors = require('cors');
+const basicAuth = require('express-basic-auth');
+require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +13,16 @@ const wss = new WebSocket.Server({ server });
 app.use(cors());
 app.use(express.static('public'));
 app.use(express.json());
+
+// === Basic Auth setup ===
+// Change 'admin' and 'yourpassword' to whatever you like
+const user = process.env.BASIC_USER;
+const pass = process.env.BASIC_PASS;
+app.use(basicAuth({
+    users: { [user]: pass },
+    challenge: true, // Prompts the browser to show login
+}));
+
 
 // Store connected ESP32 clients
 const espClients = new Set();
